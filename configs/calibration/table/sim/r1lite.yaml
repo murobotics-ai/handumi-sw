@@ -13,5 +13,5 @@ calibration:
   # The mobile base stays fixed; only the demonstrated table frame is placed in
   # robot world. Hardware uses a separate scope: physical lab-local file.
   robot_from_table:
-    position: [0.40581, 0.09585, 0.93974]
+    position: [0.40581, 0.09585, 0.89974]
     quaternion: [0.0, 0.0, -0.70710678, 0.70710678]

@@ -12,5 +12,5 @@ calibration:
   # the reachable workspace of a 0.60 m base-separation layout. Replace it
   # with a separate scope: physical lab-local transform for hardware.
   robot_from_table:
-    position: [0.25, -0.01286, 0.05]
+    position: [0.40, -0.01286, 0.05]
     quaternion: [0.0, 0.0, -0.70710678, 0.70710678]

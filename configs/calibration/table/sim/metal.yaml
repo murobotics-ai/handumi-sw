@@ -10,12 +10,13 @@ calibration:
   # rotation is required. The Metal mounting rail and tabletop share world
   # Z=0. The forward offset places the tblock workspace in front of the arms
   # rather than on top of their bases: demo hands live at table-frame y in
-  # [-0.54, 0.08] (operator side of the board), which 0.45 m maps to world y
-  # in [-0.09, 0.53]. Validated by replaying episode 0 through the actual IK
-  # solver: EE position error mean 0.26 cm / max 0.56 cm. Euclidean
+  # [-0.54, 0.08] (operator side of the board), which 0.35 m maps to world y
+  # in [-0.19, 0.43]. The previous 0.45 m offset was checked on episode 0
+  # (EE error mean 0.26 cm / max 0.56 cm); those metrics do not validate this
+  # adjusted placement. Euclidean
   # distance-to-home is NOT a valid placement metric (see openarmv1.yaml);
   # trust solver rollouts only.
   # Hardware uses a separately measured scope: physical lab-local file.
   robot_from_table:
-    position: [0.00, 0.45, 0.0]
+    position: [0.00, 0.35, 0.0]
     quaternion: [0.0, 0.0, 0.0, 1.0]

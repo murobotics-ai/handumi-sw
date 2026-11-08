@@ -13,5 +13,5 @@ calibration:
   # the visual table above the robot base.
   # Hardware uses a separately measured scope: physical lab-local file.
   robot_from_table:
-    position: [0.01286, 0.26, 0.0]
+    position: [0.01286, 0.41, 0.0]
     quaternion: [0.0, 0.0, 0.0, 1.0]
