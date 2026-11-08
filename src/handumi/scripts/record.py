@@ -120,6 +120,8 @@ from handumi.utils.voice import (
     speech_duration_s,
 )
 from handumi.visualization import BACKGROUND_COLOR, LEFT_COLOR, RIGHT_COLOR
+from handumi.web_dashboard import DEFAULT_PORT as DEFAULT_WEB_DASHBOARD_PORT
+from handumi.web_dashboard import BrowserVoiceListener, WebDashboard
 
 logging.basicConfig(
     level=logging.INFO,
@@ -830,11 +832,21 @@ def _wait_for_tracking(
     *,
     poll_s: float = 0.05,
     active_sides: tuple[str, ...] = ("left", "right"),
+    dashboard: _RecordingDashboard | None = None,
+    grippers: FeetechGripperSampler | FeetechGripperPair | None = None,
 ) -> bool:
     """Wait until both controller poses are fresh and valid."""
     last_report = float("-inf")
     while not stop_event.is_set():
         sample = tracker.latest()
+        if dashboard is not None:
+            widths = _latest_gripper_widths(grippers)
+            dashboard.state = "WAITING"
+            dashboard.detail = (
+                "Waiting for Quest controller tracking "
+                f"(left={int(sample.left_tracked)} right={int(sample.right_tracked)})"
+            )
+            dashboard.update_grippers(widths.left_mm, widths.right_mm)
         if _tracking_healthy(sample, active_sides):
             log.info("Required controllers tracked (%s); recording gate open.", "/".join(active_sides))
             return True
@@ -1463,6 +1475,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--voice-device", default=None, help=advanced("Microphone name or index (default: system default)."))
     p.add_argument("--voice-confidence", type=float, default=0.7, help=advanced("Minimum recognition confidence (0-1)."))
     p.add_argument(
+        "--web-dashboard",
+        type=int,
+        nargs="?",
+        const=DEFAULT_WEB_DASHBOARD_PORT,
+        default=None,
+        metavar="PORT",
+        help="Serve a browser dashboard on localhost:PORT (default 8890) with live "
+        "widths, tracking and camera previews. Voice commands come from the "
+        "browser microphone instead of a local one.",
+    )
+    p.add_argument(
         "--clap-control",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -2059,6 +2082,21 @@ def main() -> None:
         controls=tuple(controls),
         started_at_s=program_start_s,
     )
+    web_dashboard = None
+    if args.web_dashboard:
+        # The browser shows the live view, so the terminal keeps plain log
+        # lines instead of a full-screen panel that hides warnings.
+        dashboard._console = None
+        web_dashboard = WebDashboard(
+            status=dashboard,
+            tracker=tracker,
+            grippers=grippers,
+            voice=voice if isinstance(voice, BrowserVoiceListener) else None,
+            cameras=cameras,
+            camera_names=cam_names,
+            port=args.web_dashboard,
+        )
+        web_dashboard.start()
     dashboard.start()
     clap_detector = DoubleClapDetector() if args.clap_control else None
     clap_arbiter = BilateralClapArbiter() if args.clap_control else None
@@ -2150,7 +2188,10 @@ def main() -> None:
             else:
                 raise SystemExit("--start-button other than enter currently requires --device pico.")
 
-            if not _wait_for_tracking(tracker, stop_event, active_sides=args.active_sides):
+            if not _wait_for_tracking(
+                tracker, stop_event, active_sides=args.active_sides,
+                dashboard=dashboard, grippers=grippers,
+            ):
                 break
             # Finish the cue before capture starts so fast transitions cannot
             # overlap multiple asynchronous TTS processes.
@@ -2308,6 +2349,8 @@ def main() -> None:
                 break
     finally:
         dashboard.stop()
+        if web_dashboard is not None:
+            web_dashboard.stop()
         escape_listener.stop()
         if voice is not None:
             voice.stop()
@@ -2438,6 +2481,15 @@ def _start_voice_control(
     collector already has another hands-free control (--clap-control) or opted
     out of voice entirely.
     """
+    if getattr(args, "web_dashboard", None):
+        # The dashboard's buttons feed this listener too, so it starts even
+        # with --no-voice-control.
+        browser_listener = BrowserVoiceListener(confidence=args.voice_confidence)
+        try:
+            browser_listener.start()
+        except VoiceUnavailableError as exc:
+            raise SystemExit(f"Browser voice control unavailable.\n{exc}") from exc
+        return browser_listener
     if not args.voice_control:
         return None
     listener = VoiceCommandListener(

@@ -235,6 +235,44 @@ handumi record --help-advanced
 ```
 :::
 
+## Browser Dashboard
+
+`--web-dashboard` serves a status page from the recording workstation. Use it
+when the collector wears the headset and watches a laptop through passthrough,
+or when the workstation has no microphone. The page shows:
+
+- the recorder state, episode, frame count and saved episodes,
+- live gripper widths and encoder ticks, with the double-squeeze thresholds,
+- whether the Quest stream, headset and each controller are tracked,
+- a preview of every camera with the age of its newest frame, outlined in red
+  when a camera stops delivering frames.
+
+The page keeps updating while the recorder waits for a trigger or for tracking,
+because it reads the gripper, tracking and camera samplers directly.
+
+The server listens on `localhost:8890` only. From a laptop, forward the port and
+open the page there:
+
+```bash
+ssh -L 8890:localhost:8890 user@workstation
+handumi record --output-dir outputs/my-dataset --task "..." --web-dashboard --no-sounds
+# then open http://localhost:8890 on the laptop
+```
+
+Click **Enable microphone** once. The page streams the laptop microphone to the
+workstation as 16 kHz audio, and the workstation runs the offline Vosk
+recognizer on it, so the workstation needs neither a microphone nor PortAudio.
+Say "start", "stop" or "discard" (the longer "start recording", "stop recording"
+and "restart" also work). A command counts only when it ends the utterance:
+"okay stop" stops, "stop for lunch" is ignored. The page also has buttons for
+the same three commands, shows the last phrase it heard and why it was ignored,
+and announces state changes through the laptop speaker. Browsers allow
+microphone access only on `localhost` or HTTPS pages, which is why the page is
+reached through the SSH tunnel.
+
+With `--web-dashboard`, the terminal prints plain log lines instead of the
+full-screen status panel, so tracking and camera warnings stay visible.
+
 ## Validate the Pilot
 
 ```bash

@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HandUMI Recorder</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #181b22; --line: #2a2f3a; --text: #e7e9ee; --muted: #8b93a3;
+    --ok: #3ecf8e; --warn: #f5b942; --bad: #f2555a; --rec: #ff3b47; --info: #5aa9ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+  main { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  h2 { margin: 0 0 12px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  #banner { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; border-width: 2px; }
+  #state { font-size: 56px; font-weight: 800; letter-spacing: .02em; line-height: 1; }
+  #detail { font-size: 20px; color: var(--muted); margin-top: 8px; }
+  #counts { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  #counts b { color: var(--text); font-size: 28px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .bar { position: relative; height: 34px; background: #0b0d11; border-radius: 8px; overflow: hidden; margin: 6px 0 4px; }
+  .fill { position: absolute; inset: 0 auto 0 0; background: var(--info); transition: width .08s linear; }
+  .mark { position: absolute; top: 0; bottom: 0; width: 2px; background: #ffffff55; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; font-variant-numeric: tabular-nums; }
+  .big { font-size: 30px; font-weight: 700; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .dots { display: flex; gap: 20px; flex-wrap: wrap; }
+  .dot { display: flex; align-items: center; gap: 8px; font-size: 18px; }
+  .dot i { width: 16px; height: 16px; border-radius: 50%; background: var(--bad); display: inline-block; }
+  .dot.on i { background: var(--ok); }
+  #cams { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  .cam { border: 2px solid var(--line); border-radius: 10px; overflow: hidden; background: #000; }
+  .cam.stale { border-color: var(--bad); }
+  .cam img { width: 100%; display: block; aspect-ratio: 4 / 3; object-fit: cover; }
+  .cam .cap { display: flex; justify-content: space-between; padding: 6px 10px; background: var(--panel); font-size: 14px; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 14px 18px; cursor: pointer; color: #fff; }
+  .btns { display: flex; gap: 10px; flex-wrap: wrap; }
+  #mic { background: #343a46; }
+  #mic.live { background: var(--ok); color: #062; }
+  .start { background: var(--rec); } .stop { background: #2f7d55; } .restart { background: #7a5a16; }
+  #meter { height: 8px; background: #0b0d11; border-radius: 4px; overflow: hidden; margin-top: 12px; }
+  #meter div { height: 100%; width: 0; background: var(--ok); }
+  #heard { font-size: 22px; margin-top: 10px; min-height: 30px; }
+  #conn { position: fixed; right: 12px; bottom: 12px; font-size: 12px; color: var(--muted); }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } #state { font-size: 40px; } }
+</style>
+</head>
+<body>
+<main>
+  <section id="banner" class="panel">
+    <div>
+      <div id="state">CONNECTING</div>
+      <div id="detail">Waiting for the recorder</div>
+    </div>
+    <div id="counts">
+      <div>Episode <b id="episode">-</b></div>
+      <div><span id="frames">0</span> frames, <span id="secs">0.0</span> s</div>
+      <div>Saved <span id="saved">0</span> episodes</div>
+    </div>
+  </section>
+
+  <section class="grid2">
+    <div class="panel">
+      <h2>Grippers</h2>
+      <div id="grip-left"></div>
+      <div id="grip-right" style="margin-top:14px"></div>
+      <div class="muted" style="margin-top:8px">White marks: close below 12 mm, reopen above 20 mm (double squeeze)</div>
+    </div>
+    <div class="panel">
+      <h2>Tracking</h2>
+      <div class="dots">
+        <div class="dot" id="t-conn"><i></i>Quest stream</div>
+        <div class="dot" id="t-hmd"><i></i>Headset</div>
+        <div class="dot" id="t-left"><i></i>Left controller</div>
+        <div class="dot" id="t-right"><i></i>Right controller</div>
+      </div>
+      <div class="muted" id="t-age" style="margin-top:10px"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Voice and controls</h2>
+    <div class="btns">
+      <button id="mic">Enable microphone</button>
+      <button class="start" data-cmd="start">Start</button>
+      <button class="stop" data-cmd="stop">Stop and save</button>
+      <button class="restart" data-cmd="restart">Discard</button>
+    </div>
+    <div id="meter"><div></div></div>
+    <div id="heard" class="muted">Say "start", "stop" or "discard".</div>
+  </section>
+
+  <section class="panel">
+    <h2>Cameras</h2>
+    <div id="cams"></div>
+  </section>
+</main>
+<div id="conn">disconnected</div>
+
+<script>
+const STATE_COLORS = {
+  RECORDING: "var(--rec)", READY: "var(--info)", WAITING: "var(--warn)", SAVED: "var(--ok)",
+  DISCARDED: "var(--warn)", COMPLETED: "var(--ok)", STARTING: "var(--muted)",
+};
+const SPOKEN = {
+  RECORDING: "Recording", SAVED: "Saved", DISCARDED: "Discarded",
+  COMPLETED: "Session complete", WAITING: "Waiting for tracking",
+};
+const $ = (id) => document.getElementById(id);
+let ws = null, lastState = null, speakingUntil = 0;
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.binaryType = "arraybuffer";
+  ws.onopen = () => { $("conn").textContent = "connected"; };
+  ws.onclose = () => {
+    $("conn").textContent = "disconnected, retrying";
+    // The last snapshot stays on screen, so mark every reading as stale.
+    $("state").textContent = "OFFLINE";
+    $("state").style.color = "var(--bad)";
+    $("banner").style.borderColor = "var(--bad)";
+    $("detail").textContent = "Recorder is not running or the SSH tunnel closed. Readings below are stale.";
+    document.querySelectorAll("main > section:not(#banner)").forEach((el) => { el.style.opacity = 0.35; });
+    lastState = null;
+    setTimeout(connect, 1000);
+  };
+  ws.addEventListener("open", () => {
+    document.querySelectorAll("main > section").forEach((el) => { el.style.opacity = 1; });
+  });
+  ws.onmessage = (event) => render(JSON.parse(event.data));
+}
+
+function say(text) {
+  if (!("speechSynthesis" in window)) return;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 1.1;
+  // The microphone stays closed to the recognizer while the laptop talks.
+  speakingUntil = performance.now() + 600 + 380 * text.split(" ").length;
+  utterance.onend = () => { speakingUntil = performance.now() + 300; };
+  speechSynthesis.speak(utterance);
+}
+
+function gripperHtml(label, mm, ticks, stale) {
+  const pct = Math.max(0, Math.min(100, (mm / 90) * 100));
+  return `<div class="row"><span>${label}</span><span class="big">${mm.toFixed(1)} mm</span></div>
+    <div class="bar"><div class="fill" style="width:${pct}%;background:${stale ? "var(--bad)" : "var(--info)"}"></div>
+    <div class="mark" style="left:${12 / 90 * 100}%"></div><div class="mark" style="left:${20 / 90 * 100}%"></div></div>
+    <div class="muted">encoder ${ticks}${stale ? " (stale)" : ""}</div>`;
+}
+
+function setDot(id, on) { $(id).classList.toggle("on", !!on); }
+
+function render(s) {
+  const color = STATE_COLORS[s.state] || "var(--muted)";
+  $("state").textContent = s.state;
+  $("state").style.color = color;
+  $("banner").style.borderColor = color;
+  $("detail").textContent = s.detail || "";
+  $("episode").textContent = `${s.episode} / ${s.total}`;
+  $("frames").textContent = s.current_frames;
+  $("secs").textContent = (s.current_frames / (s.fps || 30)).toFixed(1);
+  $("saved").textContent = s.saved_episodes;
+  if (lastState !== null && s.state !== lastState && SPOKEN[s.state]) say(SPOKEN[s.state]);
+  lastState = s.state;
+
+  const g = s.grippers || {};
+  if (g.available) {
+    const stale = g.age_s > 0.25;
+    $("grip-left").innerHTML = gripperHtml("Left", g.left_mm, g.left_ticks, stale);
+    $("grip-right").innerHTML = gripperHtml("Right", g.right_mm, g.right_ticks, stale);
+  } else {
+    $("grip-left").textContent = "No gripper readings";
+    $("grip-right").textContent = "";
+  }
+
+  const t = s.tracking || {};
+  setDot("t-conn", t.connected && t.streaming);
+  setDot("t-hmd", t.hmd);
+  setDot("t-left", t.left);
+  setDot("t-right", t.right);
+  $("t-age").textContent = t.age_s == null ? "" : `last pose ${(t.age_s * 1000).toFixed(0)} ms ago`;
+
+  const cams = $("cams");
+  for (const c of s.cameras || []) {
+    let el = document.getElementById(`cam-${c.name}`);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "cam";
+      el.id = `cam-${c.name}`;
+      el.innerHTML = `<img alt=""><div class="cap"><span>${c.name}</span><span class="age"></span></div>`;
+      cams.appendChild(el);
+    }
+    const stale = !c.ok || c.age_s > 0.5;
+    el.classList.toggle("stale", stale);
+    el.querySelector(".age").textContent = c.ok ? `${(c.age_s * 1000).toFixed(0)} ms` : (c.error || "off");
+    if (c.jpeg) el.querySelector("img").src = `data:image/jpeg;base64,${c.jpeg}`;
+  }
+
+  const v = s.voice || {};
+  if (v.last_heard) {
+    const age = (Date.now() / 1000 - v.last_heard.t).toFixed(0);
+    $("heard").textContent = `Heard "${v.last_heard.text}"` +
+      (v.last_heard.action ? ` -> ${v.last_heard.action === "restart" ? "discard" : v.last_heard.action}` : ` (ignored: ${v.last_heard.reason || "not a command"})`) + `, ${age}s ago`;
+    $("heard").className = v.last_heard.action ? "" : "muted";
+  }
+}
+
+document.querySelectorAll("button[data-cmd]").forEach((button) => {
+  button.onclick = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ command: button.dataset.cmd }));
+});
+
+// Microphone: capture at 16 kHz, convert to int16, send 250 ms blocks.
+const WORKLET = `
+class Pcm16 extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = new Int16Array(4000); this.n = 0; }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (!ch) return true;
+    let peak = 0;
+    for (let i = 0; i < ch.length; i++) {
+      const x = Math.max(-1, Math.min(1, ch[i]));
+      peak = Math.max(peak, Math.abs(x));
+      this.buf[this.n++] = x * 32767;
+      if (this.n === this.buf.length) {
+        this.port.postMessage({ pcm: this.buf.buffer, peak }, [this.buf.buffer]);
+        this.buf = new Int16Array(4000); this.n = 0; peak = 0;
+      }
+    }
+    return true;
+  }
+}
+registerProcessor("pcm16", Pcm16);`;
+
+$("mic").onclick = async () => {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+  });
+  const ctx = new AudioContext({ sampleRate: 16000 });
+  const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
+  await ctx.audioWorklet.addModule(url);
+  const node = new AudioWorkletNode(ctx, "pcm16");
+  ctx.createMediaStreamSource(stream).connect(node);
+  node.port.onmessage = ({ data }) => {
+    $("meter").firstElementChild.style.width = `${Math.min(100, data.peak * 140)}%`;
+    if (performance.now() < speakingUntil || speechSynthesis.speaking) return;
+    if (ws && ws.readyState === 1) ws.send(data.pcm);
+  };
+  $("mic").textContent = "Microphone on";
+  $("mic").classList.add("live");
+};
+
+connect();
+</script>
+</body>
+</html>
