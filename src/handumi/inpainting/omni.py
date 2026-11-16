@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, cast
 if TYPE_CHECKING:
     from google.genai.interactions import Interaction
 
-MODEL = "gemini-omni-1.1-flash"
+MODEL = "gemini-omni-1.2-flash"
 API_KEY_ENV = "GEMINI_API_KEY"
 
 # Video output dominates the bill (output tokens cost ~12x input ones), and it is
